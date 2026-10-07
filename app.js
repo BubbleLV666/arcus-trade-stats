@@ -951,6 +951,7 @@ async function lbLoad() {
     LB.rows = (d.entries || []).map(lbRow); LB.at = Date.now(); LB.key = null; LB.dir = -1;
     $('#lbStatus').className = 'status'; $('#lbStatus').textContent = `Top ${LB.rows.length} · ${{ '24h': 'last 24 hours', '30d': 'last 30 days', all: 'all time' }[LB.win]} · ranked by ${{ volume: 'volume', pnl: 'realized PnL', fees: 'fees paid' }[LB.sort]} · loaded ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
     lbRender();
+    if (S && S.addr && !LB.rows.some(r => r.addr === S.addr)) lbFind(S.addr);   // the address opened in My stats: show its rank even when it is outside the top 100
   } catch (e) { if (tok === LB.tok) { $('#lbStatus').className = 'status err'; $('#lbStatus').textContent = 'Could not load the leaderboard: ' + e.message; } }
 }
 function lbRender() {
@@ -972,7 +973,7 @@ async function lbFind(addr) {
     const d = await get(API, '/leaderboard', { address: addr, window: LB.win, sortBy: LB.sort }, 20), e = d.entries && d.entries[0];
     if (!e) { box.innerHTML = `<div class="lbfoundbox">No trades by <span class="lbaddr">${shortAddr(addr)}</span> in this window.</div>`; return; }
     const r = lbRow(e); LB.found = { addr, row: r };
-    box.innerHTML = `<div class="lbfoundbox"><span class="lbaddr">${shortAddr(addr)}</span><span><b>Rank #${fmt(r.rank, 0)}</b></span><span>Volume ${r.vol == null ? '—' : '$' + big(r.vol)}</span><span class="${cls(r.pnl)}">Realized PnL ${r.pnl == null ? '—' : smoney(r.pnl, 0)}</span><span>Fees ${r.fees == null ? '—' : '$' + big(r.fees)}</span><button class="btn tiny primary" data-open="${addr}" type="button">View stats</button></div>`;
+    box.innerHTML = `<div class="lbfoundbox"><span class="lbaddr">${shortAddr(addr)}</span><span><b>Rank #${fmt(r.rank, 0)}</b>${r.rank > 100 ? ' <span class="muted">· outside the top 100</span>' : ''}</span><span>Volume ${r.vol == null ? '—' : '$' + big(r.vol)}</span><span class="${cls(r.pnl)}">Realized PnL ${r.pnl == null ? '—' : smoney(r.pnl, 0)}</span><span>Fees ${r.fees == null ? '—' : '$' + big(r.fees)}</span><button class="btn tiny primary" data-open="${addr}" type="button">View stats</button></div>`;
     lbRender();
   } catch (err) { box.innerHTML = `<div class="lbfoundbox neg">${esc(err.message)}</div>`; }
 }
