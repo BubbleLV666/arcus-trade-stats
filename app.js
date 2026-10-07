@@ -933,7 +933,71 @@ document.addEventListener('mousedown', e => { if (!cal.el.hidden && !cal.el.cont
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !cal.el.hidden) calClose(); });
 document.querySelectorAll('[data-cal]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); calOpen($('#' + (el.dataset.cal || el.id))); }));
 $('#pgo').addEventListener('click', calClose);
+/* ---------------------------------------------------------------- Leaderboard tab (top-100 per window and ranking, from the public Arcus API) */
+const LB = { win: ['24h', '30d', 'all'].includes(store.get('lb_win', '30d')) ? store.get('lb_win', '30d') : '30d', sort: ['volume', 'pnl', 'fees'].includes(store.get('lb_sort', 'volume')) ? store.get('lb_sort', 'volume') : 'volume', rows: null, key: null, dir: -1, at: null, found: null, tok: 0 };
+const lbOk = v => v != null && isFinite(v) && Math.abs(v) < 9e18;   // Arcus returns int64-max as a placeholder for some fee totals
+const lbRow = e => { const vol = lbOk(+e.volume) ? e.volume / SC : null, pnl = lbOk(+e.pnl) ? e.pnl / SC : null, fees = lbOk(+e.feesPaid) ? e.feesPaid / SC : null; return { rank: e.rank, addr: e.address, vol, pnl, fees, edge: vol > 0 && pnl != null ? pnl / vol * 1e6 : null }; };
+const shortAddr = a => a.slice(0, 6) + '…' + a.slice(-4);
+function lbUi() {
+  $('#lbWin').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.w === LB.win));
+  $('#lbSort').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.s === LB.sort));
+}
+async function lbLoad() {
+  const tok = ++LB.tok; lbUi(); LB.found = null; $('#lbFound').innerHTML = '';
+  $('#lbStatus').className = 'status busy'; $('#lbStatus').innerHTML = '<i class="spin"></i>Loading the leaderboard…';
+  try {
+    const d = await get(API, '/leaderboard', { window: LB.win, sortBy: LB.sort, limit: 100 }, 20);
+    if (tok !== LB.tok) return;
+    LB.rows = (d.entries || []).map(lbRow); LB.at = Date.now(); LB.key = null; LB.dir = -1;
+    $('#lbStatus').className = 'status'; $('#lbStatus').textContent = `Top ${LB.rows.length} · ${{ '24h': 'last 24 hours', '30d': 'last 30 days', all: 'all time' }[LB.win]} · ranked by ${{ volume: 'volume', pnl: 'realized PnL', fees: 'fees paid' }[LB.sort]} · loaded ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
+    lbRender();
+  } catch (e) { if (tok === LB.tok) { $('#lbStatus').className = 'status err'; $('#lbStatus').textContent = 'Could not load the leaderboard: ' + e.message; } }
+}
+function lbRender() {
+  const rows = LB.rows || []; if (!rows.length) { $('#lbTable').innerHTML = '<tr><td class="empty" style="text-align:center">No data</td></tr>'; $('#lbKpis').innerHTML = ''; return; }
+  const sum = k => rows.reduce((a, r) => a + (r[k] || 0), 0), edges = rows.map(r => r.edge).filter(x => x != null).sort((a, b) => a - b), med = edges.length ? edges[edges.length >> 1] : null;
+  $('#lbKpis').innerHTML = [['Volume of the top ' + rows.length, '$' + big(sum('vol'))], ['Realized PnL of the top ' + rows.length, smoney(sum('pnl'), 0)], ['Profitable', `${rows.filter(r => r.pnl > 0).length} of ${rows.length}`], ['Median PnL per $1M volume', med == null ? '—' : smoney(med, 0)]]
+    .map(([k, v]) => `<div>${k}<b class="num">${v}</b></div>`).join('');
+  let list = rows.slice(); if (LB.key) list.sort((a, b) => ((a[LB.key] == null) - (b[LB.key] == null)) || (a[LB.key] > b[LB.key] ? 1 : a[LB.key] < b[LB.key] ? -1 : 0) * LB.dir);
+  const me = S && S.addr, fd = LB.found && LB.found.addr, th = (k, t, tip) => `<th data-k="${k}"${tip ? ` title="${esc(tip)}"` : ''}>${t}${LB.key === k ? (LB.dir < 0 ? ' ↓' : ' ↑') : ''}</th>`;
+  const medal = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r;
+  $('#lbTable').innerHTML = `<thead><tr>${th('rank', '#', 'Rank in this ranking')}<th style="text-align:left">Address</th>${th('vol', 'Volume')}${th('pnl', 'Realized PnL', 'Sum of closedPnl in the window, before funding and unrealized PnL')}${th('fees', 'Fees paid')}${th('edge', 'PnL per $1M', 'Realized PnL divided by volume, scaled to $1,000,000 traded')}<th></th></tr></thead><tbody>` +
+    list.map(r => `<tr class="lbrow${r.addr === me || r.addr === fd ? ' me' : ''}"><td class="num"><span class="lbmedal">${medal(r.rank)}</span></td><td class="lbaddr" style="text-align:left" title="${r.addr}">${shortAddr(r.addr)} <button class="btn tiny" data-copy="${r.addr}" type="button" title="Copy address">copy</button></td><td class="num">${r.vol == null ? '—' : '$' + big(r.vol)}</td><td class="num ${cls(r.pnl)}">${r.pnl == null ? '—' : smoney(r.pnl, 0)}</td><td class="num">${r.fees == null ? '—' : '$' + big(r.fees)}</td><td class="num ${cls(r.edge)}">${r.edge == null ? '—' : smoney(r.edge, 0)}</td><td><button class="btn tiny primary" data-open="${r.addr}" type="button">View stats</button></td></tr>`).join('') + '</tbody>';
+}
+async function lbFind(addr) {
+  addr = addr.trim().toLowerCase(); const box = $('#lbFound');
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) { box.innerHTML = '<div class="lbfoundbox neg">Invalid address: expected 0x followed by 40 hex characters</div>'; return; }
+  box.innerHTML = '<div class="lbfoundbox"><i class="spin"></i>Looking up…</div>';
+  try {
+    const d = await get(API, '/leaderboard', { address: addr, window: LB.win, sortBy: LB.sort }, 20), e = d.entries && d.entries[0];
+    if (!e) { box.innerHTML = `<div class="lbfoundbox">No trades by <span class="lbaddr">${shortAddr(addr)}</span> in this window.</div>`; return; }
+    const r = lbRow(e); LB.found = { addr, row: r };
+    box.innerHTML = `<div class="lbfoundbox"><span class="lbaddr">${shortAddr(addr)}</span><span><b>Rank #${fmt(r.rank, 0)}</b></span><span>Volume ${r.vol == null ? '—' : '$' + big(r.vol)}</span><span class="${cls(r.pnl)}">Realized PnL ${r.pnl == null ? '—' : smoney(r.pnl, 0)}</span><span>Fees ${r.fees == null ? '—' : '$' + big(r.fees)}</span><button class="btn tiny primary" data-open="${addr}" type="button">View stats</button></div>`;
+    lbRender();
+  } catch (err) { box.innerHTML = `<div class="lbfoundbox neg">${esc(err.message)}</div>`; }
+}
+$('#lbWin').addEventListener('click', e => { const b = e.target.closest('button[data-w]'); if (!b) return; LB.win = b.dataset.w; store.set('lb_win', LB.win); lbLoad(); });
+$('#lbSort').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; LB.sort = b.dataset.s; store.set('lb_sort', LB.sort); lbLoad(); });
+$('#lbRefresh').onclick = () => lbLoad();
+$('#lbFind').addEventListener('submit', e => { e.preventDefault(); lbFind($('#lbAddr').value); });
+$('#lbTable').addEventListener('click', e => { const th = e.target.closest('th[data-k]'); if (th) { const k = th.dataset.k; if (LB.key === k) LB.dir *= -1; else { LB.key = k; LB.dir = k === 'rank' ? 1 : -1; } lbRender(); } });
+document.addEventListener('click', e => {
+  const o = e.target.closest('[data-open]'); if (o) { showView('stats'); $('#addr').value = o.dataset.open; loadWallet(o.dataset.open, 0); return; }
+  const c = e.target.closest('[data-copy]'); if (c) { try { navigator.clipboard.writeText(c.dataset.copy); const t = c.textContent; c.textContent = 'copied'; setTimeout(() => { c.textContent = t; }, 1200); } catch (err) { } }
+});
+
+/* ---- tabs: My stats / Leaderboard */
+function showView(v, keepHash) {
+  const lbv = v === 'lb';
+  $('#viewStats').hidden = lbv; $('#viewLb').hidden = !lbv;
+  document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('on', t.dataset.view === v));
+  $('#btnShare').hidden = lbv; $('#btnCards').hidden = lbv; if (lbv) $('#cardsPanel').hidden = true;
+  if (!keepHash) history.replaceState(null, '', lbv ? '#leaderboard' : (S ? '#' + S.addr + (S.idx ? ':' + S.idx : '') : location.pathname + location.search));
+  if (lbv && !LB.rows) lbLoad(); else if (lbv) lbRender();
+}
+$('#tabs').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) showView(t.dataset.view); });
+addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h === 'leaderboard') showView('lb', true); else if (/^0x[0-9a-fA-F]{40}/.test(h)) { const [a, i] = h.split(':'); showView('stats', true); if (!S || S.addr !== a.toLowerCase() || S.idx !== (parseInt(i || '0', 10) || 0)) { $('#addr').value = a; loadWallet(a, parseInt(i || '0', 10) || 0); } } });
 $('#ver').textContent = VERSION;
 renderCardsList(); renderRecent(); setAuto(); renderPeriodBar();
-{ const h = location.hash.slice(1); if (h) { const [a, i] = h.split(':'); $('#addr').value = a; loadWallet(a, parseInt(i || '0', 10) || 0); } }
+{ const h = location.hash.slice(1); if (h === 'leaderboard') showView('lb', true); else if (h) { const [a, i] = h.split(':'); $('#addr').value = a; loadWallet(a, parseInt(i || '0', 10) || 0); } }
 })();

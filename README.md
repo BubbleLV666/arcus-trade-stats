@@ -11,6 +11,11 @@ liquidation prices, fill analysis (maker/taker, win rate, profit factor, per-mar
 deposits/withdrawals, open orders, recent fills, and the Arcus points season (weeks, total points distributed,
 next drop). Cards are toggled with checkboxes ("Cards ⚙"); the choice is stored in the browser.
 
+## Leaderboard tab
+Second tab with the top-100 traders from the public Arcus leaderboard: windows 24h / 30d / all time, ranked by volume, realized PnL or fees.
+Shows volume, realized PnL, fees and PnL per $1M volume; "Find" looks up any address's rank in the selected ranking; "View stats" opens an address
+in the first tab. Deep link: `#leaderboard`. The API returns at most 100 rows per ranking.
+
 ## Period
 * Period bar: "All time", Arcus weeks (Week 1, 2 …), "Current" and "Custom range…". Weeks run from Wednesday 00:00 GMT to Tuesday
   23:59 GMT (Week 1 = 30 Sep – 6 Oct, Week 2 = 7 – 13 Oct, …). This is an assumption: the Arcus team has not officially confirmed that the

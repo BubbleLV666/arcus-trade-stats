@@ -22,6 +22,12 @@
     <button id="btnTheme" class="btn" title="Theme">◐</button>
   </header>
 
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button class="tab on" data-view="stats" type="button">📊 My stats</button>
+    <button class="tab" data-view="lb" type="button">🏆 Leaderboard</button>
+  </nav>
+
+  <div id="viewStats">
   <form id="form" class="search" autocomplete="off">
     <input id="addr" type="text" spellcheck="false" placeholder="Wallet address 0x…" aria-label="Wallet address" autocomplete="off">
     <select id="sub" aria-label="Subaccount" title="Subaccount"><option value="0">subaccount 0</option></select>
@@ -53,6 +59,21 @@
     <p>Paste an address — the site queries the public Arcus API directly and shows equity, PnL, volume, fees, positions with estimated liquidation prices, maker/taker split, per-market breakdown, funding, deposits and leaderboard rank. No keys or sign-in needed; the address is sent nowhere except the Arcus API.</p>
     <p class="muted">Arcus points are not shown per address: their API returns them only to the wallet owner after sign-in.</p>
   </section>
+  </div>
+
+  <div id="viewLb" hidden>
+    <div class="lbctl">
+      <div class="seg lbseg" id="lbWin"><button data-w="24h" type="button">Last 24 hours</button><button data-w="30d" type="button">Last 30 days</button><button data-w="all" type="button">All time</button></div>
+      <div class="seg lbseg" id="lbSort"><button data-s="volume" type="button">By volume</button><button data-s="pnl" type="button">By realized PnL</button><button data-s="fees" type="button">By fees paid</button></div>
+      <button class="btn" id="lbRefresh" type="button">↻ Refresh</button>
+      <form id="lbFind" class="lbfind" autocomplete="off"><input id="lbAddr" type="text" spellcheck="false" placeholder="Find an address in this ranking…" aria-label="Address to find"><button class="btn small" type="submit">Find</button></form>
+    </div>
+    <div id="lbStatus" class="status" role="status"></div>
+    <div id="lbFound"></div>
+    <section class="card w12 lbcard"><div id="lbKpis" class="lbkpis"></div><div class="scroll" style="max-height:none"><table id="lbTable"></table></div>
+      <p class="note">The Arcus API returns only the top 100 per ranking (all time, 30 days or 24 hours). Realized PnL is the exchange&#39;s closedPnl sum — it excludes unrealized PnL and funding. The data comes from an hourly rollup and can lag by up to an hour. Click a header to re-sort these 100 rows.</p>
+    </section>
+  </div>
 
   <footer>
     Unofficial project, not affiliated with Arcus. Data comes from the public API <code>api.arcus.xyz</code>; it may lag or contain exchange errors.
