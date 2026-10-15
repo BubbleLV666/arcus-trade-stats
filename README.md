@@ -6,7 +6,7 @@ apply per visitor IP and hosting costs nothing.
 
 ## What it shows
 Equity / PnL / ROI, volume (24h / 7d / 30d / all time) and fees, fee tier, leaderboard rank by volume and PnL,
-equity and PnL charts, risk (maintenance margin, buffer, leverage, long/short split), positions with estimated
+equity and PnL charts, average and median holding time of closed positions (rebuilt from the fills), risk (maintenance margin, buffer, leverage, long/short split), positions with estimated
 liquidation prices, fill analysis (maker/taker, win rate, profit factor, per-market, per-day, per-hour), funding,
 deposits/withdrawals, open orders, recent fills, and the Arcus points season (weeks, total points distributed,
 next drop). Cards are toggled with checkboxes ("Cards ⚙"); the choice is stored in the browser.

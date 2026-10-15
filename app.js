@@ -48,7 +48,7 @@ async function get(base, path, params = {}, w = 20) {
 /* ---------------------------------------------------------------- state */
 let S = null, runId = 0, autoTimer = null;
 const OLD_CARDS = ['summary', 'volume', 'pnl', 'equity', 'pnlchart', 'risk', 'positions', 'activity', 'curve', 'bymarket', 'daily', 'hourly', 'funding', 'transfers', 'orders', 'fills', 'season'];
-const DEFAULT_CARDS = ['summary', 'volume', 'pnl', 'equity', 'pnlchart', 'risk', 'positions', 'activity', 'curve', 'bymarket', 'daily', 'hourly', 'category', 'orderflow', 'feetier', 'standing', 'limits', 'funding', 'transfers', 'orders', 'fills', 'season'];
+const DEFAULT_CARDS = ['summary', 'volume', 'pnl', 'equity', 'pnlchart', 'risk', 'positions', 'activity', 'curve', 'bymarket', 'daily', 'hourly', 'category', 'holding', 'orderflow', 'feetier', 'standing', 'limits', 'funding', 'transfers', 'orders', 'fills', 'season'];
 let enabled = new Set(store.get('cards', DEFAULT_CARDS));
 { const seen = new Set(store.get('cards_seen', OLD_CARDS)); DEFAULT_CARDS.forEach(id => { if (!seen.has(id)) enabled.add(id); }); store.set('cards_seen', DEFAULT_CARDS); store.set('cards', [...enabled]); }   // cards added in later versions switch on automatically
 let range = store.get('range', 'week');
@@ -154,6 +154,26 @@ function riskCalc(a, mk) {
 }
 
 /* ---------------------------------------------------------------- cards */
+function holdStats(fills) {   // closed positions rebuilt from the fills: opened by an OPEN_* fill, closed when the size is back to zero (or flips)
+  const asc = fills.slice().sort((a, b) => a.createdAt - b.createdAt || a.sequenceNumber - b.sequenceNumber), pos = {}, since = {}, all = [], by = {};
+  const done = (m, t0, t1, s) => { s = (t1 - t0) / 1e6; all.push([s, m]); (by[m] = by[m] || []).push(s); };
+  for (const f of asc) {
+    const m = f.marketDisplayName, sz = (f.side === 'BUY' ? 1 : -1) * n(f.size);
+    if (/^OPEN/.test(f.positionEffect || '') && since[m] == null) { pos[m] = 0; since[m] = f.createdAt; }
+    if (since[m] == null) continue;   // opened before the loaded fills: its start is unknown
+    const prev = pos[m] || 0, next = Math.round((prev + sz) * 1e9) / 1e9;
+    if (Math.abs(next) < 1e-9) { done(m, since[m], f.createdAt); since[m] = null; pos[m] = 0; }
+    else if (prev !== 0 && Math.sign(prev) !== Math.sign(next)) { done(m, since[m], f.createdAt); since[m] = f.createdAt; pos[m] = next; }
+    else pos[m] = next;
+  }
+  const r = { n: all.length, open: Object.keys(since).filter(m => since[m] != null).length };
+  if (!all.length) return r;
+  const ss = all.map(x => x[0]).sort((a, b) => a - b);
+  r.avg = ss.reduce((a, b) => a + b, 0) / ss.length; r.med = ss.length % 2 ? ss[ss.length >> 1] : (ss[ss.length / 2 - 1] + ss[ss.length / 2]) / 2;
+  r.max = all.reduce((a, x) => x[0] > a[0] ? x : a); r.min = all.reduce((a, x) => x[0] < a[0] ? x : a);
+  r.top = Object.entries(by).map(([k, v]) => ({ k, n: v.length, avg: v.reduce((a, b) => a + b, 0) / v.length })).sort((a, b) => b.n - a.n).slice(0, 5);
+  return r;
+}
 /* ---- periods: Total / Arcus weeks / current week / custom range */
 const WEEK = 7 * 86400e3;
 let period = { key: 'cur' };   // every visit opens on the current week (not remembered between visits)
@@ -206,6 +226,12 @@ const TIPS = {
   'Volume rank · last 30 days': 'Your place among all Arcus traders by volume over the last 30 days.',
   'Volume rank · last 24 hours': 'Your place among all Arcus traders by volume over the last 24 hours.',
   'PnL rank (all time)': 'Your place among all Arcus traders by realized PnL since launch.',
+  // position holding
+  'Closed positions': 'Positions that were opened and then fully closed (size back to zero, or flipped long/short) inside the loaded fills.',
+  'Average hold': 'Mean time from the fill that opened a position to the fill that closed it. A few very long positions pull it up, so read it together with the median.',
+  'Median hold': 'The middle holding time: half of the closed positions were held shorter, half longer. Less distorted by a few very long trades than the average.',
+  'Longest hold': 'The longest-held closed position and its market.',
+  'Shortest hold': 'The shortest-held closed position and its market.',
   // trading style
   'Fills': 'Number of executed trades. One order can be split into several fills.',
   'Volume': 'Total notional traded = sum of size × price over all fills.',
@@ -391,6 +417,17 @@ const CARDS = [
     for (const f of S.fills) { const v = n(f.size) * n(f.price), c = (S.mk[f.marketId] || {}).category || 'OTHER'; by[c] = (by[c] || 0) + v; tot += v; }
     const rows = Object.entries(by).sort((a, b) => b[1] - a[1]); if (!rows.length) return S.fillsDone ? '<div class="empty">No fills</div>' : '<div class="empty">Loading fills…</div>';
     return `<div class="rows">` + rows.map(([c, v]) => `<div class="hbar"><div class="hbl"><span>${esc(c.toLowerCase())}</span><b class="num">${fmt(v / tot * 100, 1)}% · $${big(v)}</b></div><div class="hbt"><i style="width:${v / tot * 100}%"></i></div></div>`).join('') + `</div>`;
+  } },
+  { id: 'holding', title: 'Position holding', sub: fsub, w: 4, render(S) {
+    if (!S.fillsDone) return '<div class="empty">Loading fills…</div>';   // computed once, after all fills are loaded
+    if (!S.fills.length) return '<div class="empty">No fills</div>';
+    const key = S.fills.length + ':' + S.fills[0].tradeId, H = (S._hold && S._hold.key === key) ? S._hold.v : (S._hold = { key, v: holdStats(S.fills) }).v, ds = x => x < 60 ? Math.round(x) + 's' : dur(x);
+    const note = `<p class="note">A position is counted from the fill that opens it to the fill that brings its size back to zero (or flips it). Positions opened before the loaded fills${H.open ? ` and the ${H.open} still open` : ' or still open'} are not counted${S.fillsDone ? '' : '; fills are still loading'}. Load more fills or pick a period for a fuller picture.</p>`;
+    if (!H.n) return '<div class="empty">No closed positions in the loaded fills</div>' + note;
+    return `<div class="big num">${ds(H.avg)}</div><div class="rows">` + row('Closed positions', fmt(H.n, 0)) + row('Average hold', ds(H.avg)) + row('Median hold', ds(H.med)) +
+      row('Longest hold', `${ds(H.max[0])} · ${esc(H.max[1])}`) + row('Shortest hold', `${ds(H.min[0])} · ${esc(H.min[1])}`) + `</div>` +
+      `<div class="rows" style="margin-top:10px"><div class="row"><span><b>By market</b></span><span class="muted">closed · avg hold</span></div>` +
+      H.top.map(m => row(esc(m.k), `${fmt(m.n, 0)} · ${ds(m.avg)}`, 'number of closed positions in this market and their average holding time')).join('') + `</div>` + note;
   } },
   { id: 'orderflow', title: 'Order flow', sub: S => S.orders ? `${fmt(S.orders.length, 0)} orders · ${getPeriod(S) ? getPeriod(S).label : 'latest page'}` : '', w: 4, render(S) {
     const o = S.orders; if (!o) return '<div class="empty">Loading orders…</div>'; if (!o.length) return '<div class="empty">No orders</div>';
