@@ -414,7 +414,7 @@ const CARDS = [
       `<div class="scroll" style="max-height:200px;margin-top:8px"><table><thead><tr><th>Tier</th><th>30d volume ≥</th><th>Maker</th><th>Taker</th></tr></thead><tbody>` +
       tiers.map(x => `<tr${x.level === cur ? ' style="background:var(--surface-2)"' : ''}><td>${x.level === cur ? '▶ ' : ''}${esc(x.name)}</td><td class="num">${x.volume_threshold ? '$' + big(th(x)) : '—'}</td><td class="num">${bp(x.maker_fee_ppm)}</td><td class="num">${bp(x.taker_fee_ppm)}</td></tr>`).join('') + `</tbody></table></div><p class="note">Fees in bps; negative = rebate. Tier is based on rolling 30-day volume.</p>`;
   } },
-  { id: 'standing', title: 'Leaderboard standing', sub: 'Arcus windows: all time · 30d · 24h', w: 8, render(S) {
+  { id: 'standing', title: 'Leaderboard standing', sub: 'Arcus windows: all time · 30d · 7d · 24h', w: 8, render(S) {
     const x = S.ex && S.ex.lbx; if (!x) return '<div class="empty">Loading…</div>';
     const ok = v => v != null && isFinite(v) && Math.abs(v) < 9e18, e0 = (g, k) => g && g[k] && g[k].entries && g[k].entries[0];
     const vr = (S.lb && S.lb.vr) || {}, rk = v => v == null ? '—' : '#' + fmt(v, 0);
@@ -422,9 +422,13 @@ const CARDS = [
       const g = x[w] || {}, ep = e0(g, 'pnl'), ef = e0(g, 'fees'), vol = ep ? n(ep.volume) / SC : (ef ? n(ef.volume) / SC : null);
       const pnl = ep && ok(n(ep.pnl)) ? n(ep.pnl) / SC : null, fee = ef && ok(n(ef.feesPaid)) ? n(ef.feesPaid) / SC : (ep && ok(n(ep.feesPaid)) ? n(ep.feesPaid) / SC : null);
       return `<tr><td>${lab}</td><td class="num">${vol == null ? '—' : '$' + big(vol)}</td><td class="num">${rk(vr[vk])}</td><td class="num ${cls(pnl)}">${pnl == null ? '—' : smoney(pnl, 2)}</td><td class="num">${ep ? rk(ep.rank) : '—'}</td><td class="num">${fee == null ? '—' : money(fee)}</td><td class="num">${ef ? rk(ef.rank) : '—'}</td></tr>`;
-    }).join('');
-    return `<div class="scroll" style="max-height:none"><table><thead><tr><th>Window</th><th>Volume</th><th>Vol. rank</th><th>Realized PnL</th><th>PnL rank</th><th>Fees paid</th><th>Fee rank</th></tr></thead><tbody>${rows}</tbody></table></div>` +
-      `<p class="note">Ranks are among all Arcus traders. Arcus offers only these three windows, so a weekly rank is not available. Realized PnL here is the exchange's closedPnl sum (before funding and unrealized). Rows are empty if the address did not trade in the window.</p>`;
+    });
+    const w7 = win(S, '7d'), cut = (Date.now() - 7 * 864e5) * 1000, fl = S.fills || [];   // 7d is not an Arcus ranking window: volume and fees come from /account/stats, PnL from the loaded fills
+    const cov = !getPeriod(S) && S.fillsDone && fl.length && (fl.reduce((m, f) => Math.min(m, f.createdAt), Infinity) <= cut || fl.length < parseInt($('#depth').value, 10));
+    const p7 = cov ? fl.reduce((a, f) => f.createdAt >= cut ? a + n(f.closedPnl) : a, 0) : null, na = 'title="Arcus ranks only all time, 30 days and 24 hours"';
+    rows.splice(2, 0, `<tr><td>Last 7 days</td><td class="num">${w7 ? '$' + big(n(w7.volume) / SC) : '—'}</td><td class="num" ${na}>—</td><td class="num ${cls(p7)}"${cov ? '' : ' title="Shown when the loaded fills cover the last 7 days (pick a larger depth or wait for the fills to load)"'}>${p7 == null ? '—' : smoney(p7, 2)}</td><td class="num" ${na}>—</td><td class="num">${w7 ? money(n(w7.feesPaid) / SC) : '—'}</td><td class="num" ${na}>—</td></tr>`);
+    return `<div class="scroll" style="max-height:none"><table><thead><tr><th>Window</th><th>Volume</th><th>Vol. rank</th><th>Realized PnL</th><th>PnL rank</th><th>Fees paid</th><th>Fee rank</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>` +
+      `<p class="note">Ranks are among all Arcus traders. Arcus ranks only all time, 30 days and 24 hours, so there is no 7-day rank. The 7-day volume and fees come from the account stats; the 7-day realized PnL is summed from the loaded fills. Realized PnL here is the exchange's closedPnl sum (before funding and unrealized). Rows are empty if the address did not trade in the window.</p>`;
   } },
   { id: 'limits', title: 'Limits & margin settings', w: 4, render(S) {
     if (!S.ex) return '<div class="empty">Loading…</div>';
@@ -641,14 +645,13 @@ $('#pgo').onclick = () => { const f = parseGmt($('#pf').value), t = parseGmt($('
 
 /* ---------------------------------------------------------------- Share card (canvas, for Discord) */
 const SH = { week: null, tok: 0, cache: {}, data: null, w: null, brand: null, size: 720,   // the only output format: 720 x 486 px
-   name: store.get('sh_name', ''), bg: null, dim: Math.max(0, Math.min(85, +store.get('sh_dim', 55))), slots: store.get('sh_slots', null) };
+   name: store.get('sh_name', ''), bg: null, dim: Math.max(0, Math.min(85, +store.get('sh_dim', 55))), slots: store.get('sh_slots', null), lbName: store.get('sh_lbname', ''), ptsAll: !!store.get('sh_ptsall', false) };
 // The logo is embedded as a data URI: an image loaded from a file next to the page taints the canvas when the page is opened from disk (file://),
 // which makes canvas.toBlob() fail ("Tainted canvases may not be exported").
 const ARCUS_LOGO = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQ0IiBoZWlnaHQ9IjE0NCIgdmlld0JveD0iMCAwIDE0NCAxNDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xNC4yMDcgNjIuODAzMkMxNC4yMDcgNjAuMTg1IDE2LjMyOTUgNTguMDYyNSAxOC45NDc4IDU4LjA2MjVINTguNjY4OUM2NS4wMDQyIDU4LjA2MjUgNjguMTc3IDY1LjcyMjIgNjMuNjk3MiA3MC4yMDE5TDIyLjMgMTExLjU5OUMxOS4zMTM1IDExNC41ODYgMTQuMjA3IDExMi40NzEgMTQuMjA3IDEwOC4yNDdWNjIuODAzMloiIGZpbGw9IiNFRERGQkUiLz4KPHBhdGggZD0iTTg2LjUzNTIgMTI0LjQ0N0M4Ni41MzUyIDEyNy4wNjUgODQuNDEyNyAxMjkuMTg3IDgxLjc5NDQgMTI5LjE4N0wzNi4zNTA3IDEyOS4xODdDMzIuMTI3MSAxMjkuMTg3IDMwLjAxMiAxMjQuMDgxIDMyLjk5ODUgMTIxLjA5NUw3NC4zOTU3IDc5LjY5NzNDNzguODc1NSA3NS4yMTc2IDg2LjUzNTIgNzguMzkwMyA4Ni41MzUyIDg0LjcyNTZMODYuNTM1MiAxMjQuNDQ3WiIgZmlsbD0iI0VEREZCRSIvPgo8cGF0aCBkPSJNMTQuNzAwNSAxNy44NDY2QzE0LjcwMDUgMTUuOTM3OSAxNi4yNDc4IDE0LjM5MDYgMTguMTU2NSAxNC4zOTA2SDY5LjAzNjFDMTAyLjQzOCAxNC4zOTA2IDEyOS41MTYgNDEuNDY4NCAxMjkuNTE2IDc0Ljg3MDZWMTI1Ljk5MUMxMjkuNTE2IDEyNy44OTkgMTI3Ljk2OSAxMjkuNDQ3IDEyNi4wNiAxMjkuNDQ3SDEwNC4xQzEwMi4xOTEgMTI5LjQ0NyAxMDAuNjQ0IDEyNy44OTkgMTAwLjY0NCAxMjUuOTkxVjc5LjczMzNDMTAwLjY0NCA1OS4zNzM5IDg0LjEzOTUgNDIuODY5MyA2My43ODAxIDQyLjg2OTNIMTguMTU2NUMxNi4yNDc4IDQyLjg2OTMgMTQuNzAwNSA0MS4zMjIgMTQuNzAwNSAzOS40MTMzVjE3Ljg0NjZaIiBmaWxsPSIjRURERkJFIi8+CjxwYXRoIGQ9Ik0xNC4yMDcgNjIuODA1MkMxNC4yMDcgNjAuMTg3IDE2LjMyOTUgNTguMDY0NSAxOC45NDc4IDU4LjA2NDVINTguNjY4OUM2NS4wMDQyIDU4LjA2NDUgNjguMTc3IDY1LjcyNDIgNjMuNjk3MiA3MC4yMDM5TDIyLjMgMTExLjYwMUMxOS4zMTM1IDExNC41ODggMTQuMjA3IDExMi40NzIgMTQuMjA3IDEwOC4yNDlWNjIuODA1MloiIGZpbGw9IiNFRERGQkUiLz4KPHBhdGggZD0iTTg2LjUwNTQgMTI0LjQzNEM4Ni41MDU0IDEyNy4wNTIgODQuMzgyOSAxMjkuMTc1IDgxLjc2NDcgMTI5LjE3NUgzNi4zMjA5QzMyLjA5NzQgMTI5LjE3NSAyOS45ODIyIDEyNC4wNjkgMzIuOTY4NyAxMjEuMDgyTDc0LjM2NiA3OS42ODQ4Qzc4Ljg0NTcgNzUuMjA1IDg2LjUwNTQgNzguMzc3OCA4Ni41MDU0IDg0LjcxMzFMODYuNTA1NCAxMjQuNDM0WiIgZmlsbD0iI0VEREZCRSIvPgo8cGF0aCBkPSJNMTQuNzAwNSAxNy44NDY2QzE0LjcwMDUgMTUuOTM3OSAxNi4yNDc4IDE0LjM5MDYgMTguMTU2NSAxNC4zOTA2SDY5LjAzNkMxMDIuNDM4IDE0LjM5MDYgMTI5LjUxNiA0MS40Njg0IDEyOS41MTYgNzQuODcwNlYxMjUuOTkxQzEyOS41MTYgMTI3Ljg5OSAxMjcuOTY5IDEyOS40NDcgMTI2LjA2IDEyOS40NDdIMTA0LjFDMTAyLjE5MSAxMjkuNDQ3IDEwMC42NDQgMTI3Ljg5OSAxMDAuNjQ0IDEyNS45OTFWNzkuNzMzM0MxMDAuNjQ0IDU5LjM3MzkgODQuMTM5NSA0Mi44NjkzIDYzLjc4MDEgNDIuODY5M0gxOC4xNTY1QzE2LjI0NzggNDIuODY5MyAxNC43MDA1IDQxLjMyMiAxNC43MDA1IDM5LjQxMzNWMTcuODQ2NloiIGZpbGw9IiNFRERGQkUiLz4KPC9zdmc+Cg==';
 { const im = new Image(); im.onload = () => { SH.brand = im; try { shRedraw(); } catch (e) { } }; im.src = ARCUS_LOGO; }
 store.set('sh_logo', null);   // the logo upload was removed; free the stored data
 { const b = store.get('sh_bg', null); if (b) { const im = new Image(); im.onload = () => { SH.bg = im; }; im.src = b; } }
-const shKey = () => `sh_${S.addr}_${SH.week}`;
 async function fetchRange(fromUs, toUs, tok) {
   const out = []; let to = toUs;
   for (;;) {
@@ -737,10 +740,64 @@ const SHPNL = new Set(SHM.filter(m => m.pnl).map(m => m.id));
 const shHasPnl = () => SH.slots.some(id => SHPNL.has(id));
 const shSync = () => { $('#shPnl').checked = shHasPnl(); };
 const dayLbl = (ms, o) => new Date(ms).toLocaleDateString('en-US', { timeZone: 'UTC', ...o });
+/* ---- points on the card: looked up by the name on the public Arcus points leaderboard (the API has no per-wallet points without sign-in).
+   Points of one week = the cumulative total after that week's drop minus the one before it, taken from points-history.json (local snapshots, see README). */
+const PL = { rows: new Map(), off: 0, total: null, done: false, busy: null, at: 0 };
+async function plLookup(name) {
+  const k = name.trim().toLowerCase(); if (!k) return;
+  if (PL.at && Date.now() - PL.at > 600e3) Object.assign(PL, { rows: new Map(), off: 0, total: null, done: false, busy: null, at: 0 });   // refresh every 10 minutes
+  while (!PL.rows.has(k) && !PL.done) {
+    if (!PL.busy) PL.busy = (async () => {
+      const d = await get(PTS, '/leaderboard', { limit: 500, offset: PL.off }, 1), es = d.entries || [];
+      for (const e of es) PL.rows.set(e.name.toLowerCase(), e);
+      PL.total = d.total; PL.off += es.length; PL.at = PL.at || Date.now(); if (!es.length || PL.off >= d.total) PL.done = true;
+      $('#shPtsMsg').textContent = PL.done || PL.rows.has(k) ? '' : `Searching the leaderboard… ${fmt(PL.off, 0)} of ${fmt(PL.total, 0)}`; shRedraw();
+    })().finally(() => { PL.busy = null; });
+    await PL.busy;
+  }
+}
+const PH = { data: null, tried: false };
+async function loadPtsHistory() {
+  if (PH.tried) return; PH.tried = true;
+  try {
+    const r = await fetch('points-history.json', { cache: 'no-cache' }); if (!r.ok) return; const j = await r.json();
+    PH.data = { idx: new Map(j.names.map((nm, i) => [nm.toLowerCase(), i])), cum: j.cum || {} };
+  } catch (e) { }
+}
+const dropAt = n => seasonStart(S) + n * WEEK + 19 * 3600e3;   // week n is paid on the next Wednesday, 19:00 GMT
+function histCum(nm, n) { const H = PH.data, a = H && H.cum[n], i = H && H.idx.get(nm.toLowerCase()); return a ? (i == null ? 0 : a[i]) : undefined; }
+function shPoints(d) {   // content of the POINTS panel: { big, label, name, sub } | { msg: [..] } | null when no name is entered
+  const nm = SH.lbName.trim(); if (!nm) return null;
+  const e = PL.rows.get(nm.toLowerCase());
+  if (!e) return { msg: PL.done ? ['Name not found', 'Check the spelling of your name on', 'the Arcus points leaderboard'] : ['Looking up…', 'Searching the points leaderboard'] };
+  const tail = `Rank #${fmt(e.rank, 0)} · ${e.tier}`;
+  if (SH.ptsAll) return { big: fmt(e.points, 2), label: 'POINTS · ALL TIME', name: e.name, sub: tail };
+  const w = d.w, label = 'POINTS · WEEK ' + w.n;
+  if (Date.now() < dropAt(w.n)) return { msg: ['Not distributed yet', `Week ${w.n} points are paid on`, new Date(dropAt(w.n)).toLocaleString('en-US', { weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC', timeZoneName: 'short' })] };
+  const cur = histCum(e.name, w.n), prev = w.n === 1 ? 0 : histCum(e.name, w.n - 1);
+  if (cur === undefined || prev === undefined) return { msg: ['No data for week ' + w.n, 'The API only returns the running total,', 'weekly values need saved snapshots'] };
+  const pts = Math.round((cur - prev) * 100) / 100, a = PH.data.cum[w.n]; let above = 0; for (let i = 0; i < a.length; i++) if (a[i] > cur) above++;
+  return { big: fmt(pts, 2), label, name: e.name, sub: `Rank #${fmt(above + 1, 0)} after the drop · ${e.tier}`, perM: d.vol > 0 ? `${fmt(pts / d.vol * 1e6, 1)} pts per $1M volume` : '' };
+}
+async function shLookup() {
+  let nm = SH.lbName.trim(); if (!nm) { $('#shPtsMsg').textContent = ''; shRedraw(); return; }
+  $('#shPtsMsg').textContent = 'Searching the leaderboard…';
+  const rk = /^#?\s*(\d[\d,]*)$/.exec(nm);   // a rank instead of a name (the app may show your own row under another name): resolve it to the name once
+  if (rk) {
+    const rank = parseInt(rk[1].replace(/,/g, ''), 10);
+    try { const d = await get(PTS, '/leaderboard', { limit: 1, offset: Math.max(0, rank - 1) }, 1), e = d.entries && d.entries[0];
+      if (!e || e.rank !== rank) { $('#shPtsMsg').textContent = `There is no rank #${fmt(rank, 0)} in the points leaderboard.`; return; }
+      PL.rows.set(e.name.toLowerCase(), e); SH.lbName = nm = e.name; $('#shLbName').value = e.name; store.set('sh_lbname', e.name);
+    } catch (err) { $('#shPtsMsg').textContent = 'Could not load the points leaderboard: ' + err.message; return; }
+  }
+  try { await Promise.all([plLookup(nm), loadPtsHistory()]); } catch (e) { $('#shPtsMsg').textContent = 'Could not load the points leaderboard: ' + e.message; return; }
+  const e = PL.rows.get(nm.toLowerCase());
+  $('#shPtsMsg').textContent = e ? `${e.name} · rank #${fmt(e.rank, 0)} · ${e.tier} · ${fmt(e.points, 2)} pts in total` : 'Not found in the points leaderboard. Names are not case sensitive; check the spelling.';
+  shRedraw();
+}
 async function loadShare() {
   const tok = ++SH.tok, w = weeksList(S).find(x => x.n === SH.week); if (!w) return;
   $('#shWeek').textContent = `Week ${w.n} · ${dayLbl(w.from, { day: '2-digit', month: '2-digit' })} – ${dayLbl(w.end, { day: '2-digit', month: '2-digit' })}${w.cur ? ' (current)' : ''}`;
-  const pv = store.get(shKey(), {}); $('#shPts').value = pv.pts ?? ''; $('#shRank').value = pv.rank ?? '';
   const key = S.addr + ':' + S.idx + ':' + w.n, hit = SH.cache[key];
   if (hit && !w.cur) { SH.data = weekData(w, hit); drawPreview(); ensurePrev(); return; }
   $('#shMsg').textContent = 'Loading fills for this week…'; SH.data = null; drawPreview();
@@ -794,19 +851,20 @@ function drawShare(cv, d, preview, R = 1.5) {   // layout is 1200 x 810; R = out
   T(`total notional traded ${w.cur ? 'so far this week' : 'this week'} · not profit`, 90, PY + 184, 20, MUT, 500);
   const mx = Math.max(...d.byDay, 1), bx = 90, bw = 58, gap = 24, base = PY + 238;
   d.byDay.forEach((v, i) => { const h = Math.max(4, v / mx * 40), x = bx + i * (bw + gap); rr(c, x, base - h, bw, h, 7); c.fillStyle = v > 0 ? (v === mx ? 'rgba(200,215,205,.55)' : 'rgba(160,180,168,.38)') : 'rgba(160,180,168,.18)'; c.fill(); T(dayLbl(w.from + i * 864e5, { weekday: 'short' }), x + bw / 2, base + 24, 17, MUT, 500, 'center'); });
-  const pv = store.get(shKey(), {}), pts = parseFloat(pv.pts), rank = parseFloat(pv.rank);
-  if (isFinite(pts)) {
-    T('POINTS', 758, PY + 52, 20, GREEN, 700, 'left', 3);
-    T(fmt(pts, pts % 1 ? 2 : 0), 758, PY + 164, 124, GREEN, 800);
-    if (isFinite(rank)) T('Rank #' + fmt(rank, 0), 758, PY + 214, 30, '#d7e6dc', 600);
-    if (d.vol > 0) T(`${fmt(pts / d.vol * 1e6, 1)} pts per $1M volume`, 758, PY + 252, 20, MUT, 500);
+  const pp = shPoints(d);
+  if (pp && pp.big) {
+    T(pp.label, 758, PY + 52, 20, GREEN, 700, 'left', 3);
+    let bs = 124; c.font = `800 ${bs}px ${FONT}`; while (c.measureText(pp.big).width > 360 && bs > 56) { bs -= 4; c.font = `800 ${bs}px ${FONT}`; }
+    T(pp.big, 758, PY + 52 + 40 + bs * .72, bs, GREEN, 800);
+    let ns = 30; c.font = `700 ${ns}px ${FONT}`; while (c.measureText(pp.name).width > 360 && ns > 18) { ns -= 2; c.font = `700 ${ns}px ${FONT}`; }
+    T(pp.name, 758, PY + 214, ns, '#d7e6dc', 700);
+    T(pp.sub, 758, PY + 244, 20, MUT, 500);
+    if (pp.perM) T(pp.perM, 758, PY + 268, 18, MUT, 500);
   } else if (preview) {
     c.save(); rr(c, 724 + 6, PY + 6, 408, PH - 12, 22); c.setLineDash([10, 8]); c.strokeStyle = 'rgba(94,224,138,.55)'; c.lineWidth = 2; c.stroke(); c.restore();
     T('POINTS', 758, PY + 52, 20, GREEN, 700, 'left', 3);
-    T('←', 758, PY + 150, 84, GREEN, 700);
-    T('Enter your points', 758, PY + 196, 32, '#e6f2ea', 700);
-    T('Fill in “Points this week” and', 758, PY + 232, 20, MUT, 500);
-    T('“Rank” in the form next to the card', 758, PY + 258, 20, MUT, 500);
+    if (!pp) { T('←', 758, PY + 150, 84, GREEN, 700); T('Enter your name', 758, PY + 196, 32, '#e6f2ea', 700); T('Type your name from the Arcus points', 758, PY + 232, 20, MUT, 500); T('leaderboard in the form next to the card', 758, PY + 258, 20, MUT, 500); }
+    else { T(pp.msg[0], 758, PY + 120, 36, '#e6f2ea', 700); pp.msg.slice(1).forEach((m, i) => T(m, 758, PY + 164 + i * 28, 20, MUT, 500)); }
   } else {
     T('FILLS', 758, PY + 52, 20, GREEN, 700, 'left', 3);
     T(fmt(d.fills, 0), 758, PY + 164, 124, GREEN, 800);
@@ -830,7 +888,7 @@ function shPreviewSize() {
 function drawPreview() {
   const cv = $('#shCv'); if (!SH.data) { const c = cv.getContext('2d'); cv.width = SH.size; cv.height = Math.floor(SH.size * 810 / 1200); c.fillStyle = '#0a130e'; c.fillRect(0, 0, cv.width, cv.height); c.fillStyle = '#8aa597'; c.font = '20px system-ui'; c.textAlign = 'center'; c.fillText('Loading…', cv.width / 2, cv.height / 2); shPreviewSize(); return; }
   drawShare(cv, SH.data, true, SH.size / 1200); shDims(); shPreviewSize();
-  const need = !isFinite(parseFloat(store.get(shKey(), {}).pts)); $('#shPts').classList.toggle('need', need); $('#shRank').classList.toggle('need', need);
+  $('#shLbName').classList.toggle('need', !SH.lbName.trim());
 }
 function buildSlots() {
   const dflt = SHP.default, by = Object.fromEntries(SHM.map(m => [m.id, m])), g = {};
@@ -846,12 +904,15 @@ function openShare() {
   const ws = weeksList(S); if (!ws.length) return;
   SH.week = ws[ws.length - 1].n;   // always open on the current week; ‹ goes to earlier weeks
   buildSlots(); shDims(); $('#shName').value = SH.name; shSync(); $('#shDim').value = String(SH.dim); $('#shDimV').textContent = SH.dim + '%'; $('#shBgNote').textContent = SH.bg ? 'Background image is used.' : 'No background selected.';
-  $('#shareDlg').showModal(); loadShare();
+  $('#shLbName').value = SH.lbName; $('#shPtsAll').checked = SH.ptsAll; $('#shPtsMsg').textContent = '';
+  $('#shareDlg').showModal(); loadShare(); shLookup();
 }
 const shStep = d => { const ws = weeksList(S), i = ws.findIndex(x => x.n === SH.week), j = Math.max(0, Math.min(ws.length - 1, i + d)); SH.week = ws[j].n; loadShare(); };
 $('#btnShare').onclick = openShare; $('#shClose').onclick = () => $('#shareDlg').close();
 $('#shPrev').onclick = () => shStep(-1); $('#shNext').onclick = () => shStep(1);
 let shT; const shRedraw = () => { clearTimeout(shT); shT = setTimeout(() => SH.data && drawPreview(), 100); };
+$('#shLbName').oninput = e => { SH.lbName = e.target.value; store.set('sh_lbname', SH.lbName); clearTimeout(shLookup.t); shLookup.t = setTimeout(shLookup, 450); shRedraw(); };
+$('#shPtsAll').onchange = e => { SH.ptsAll = e.target.checked; store.set('sh_ptsall', SH.ptsAll); shRedraw(); };
 $('#shName').oninput = e => { SH.name = e.target.value; store.set('sh_name', SH.name); shRedraw(); };
 $('#shSlots').addEventListener('change', e => {
   const sel = e.target.closest('select'); if (!sel) return; const i = +sel.dataset.i, v = sel.value, old = SH.slots[i], j = SH.slots.indexOf(v);
@@ -872,8 +933,6 @@ $('#shPnl').onchange = e => {
   }
   store.set('sh_slots', SH.slots); buildSlots(); shSync(); shRedraw(); ensurePrev();
 };
-const shSaveNums = () => { store.set(shKey(), { pts: $('#shPts').value, rank: $('#shRank').value }); shRedraw(); };
-$('#shPts').oninput = shSaveNums; $('#shRank').oninput = shSaveNums;
 $('#shBgBtn').onclick = () => $('#shBg').click();
 $('#shBg').onchange = e => {
   const f = e.target.files[0]; if (!f) return; const rd = new FileReader();

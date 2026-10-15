@@ -228,3 +228,14 @@ footer{margin:30px 0 8px;color:var(--ink-3);font-size:12px;border-top:1px solid 
 .lbmedal{display:inline-block;width:1.4em;text-align:center}
 .lbfoundbox{background:var(--surface);border:1px solid var(--s3);border-radius:12px;padding:10px 14px;margin:6px 0;font-size:13.5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .btn.tiny{padding:2px 8px;font-size:12px}
+
+/* "?" tooltip next to a form label */
+.qtip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin:0 2px;border-radius:50%;border:1px solid var(--ink-3);color:var(--ink-2);font-size:11px;font-weight:600;cursor:help;vertical-align:1px}
+.qtip:hover,.qtip:focus{color:var(--ink);border-color:var(--ink);outline:0}
+.qtipbox{display:none;position:absolute;left:-6px;top:calc(100% + 8px);z-index:40;width:min(300px,76vw);text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:400;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.35);cursor:default}
+.qtipbox>b{display:block;margin-bottom:4px;font-size:12.5px}
+.qtipbox>span{display:block;margin-bottom:3px}
+.qtipbox img{display:block;width:100%;height:auto;margin:8px 0;border:1px solid var(--line);border-radius:6px}
+.qtipbox .qtipsmall{color:var(--ink-2)}
+.qtip:hover .qtipbox,.qtip:focus .qtipbox,.qtip:focus-within .qtipbox{display:block}
+.shnote a{color:inherit;text-decoration:underline}

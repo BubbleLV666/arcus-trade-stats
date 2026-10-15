@@ -87,10 +87,12 @@
     <span class="sp"></span><button class="btn small" id="shClose" aria-label="Close">✕</button></div>
   <div class="shbody">
     <div class="shform">
-      <p class="shnote shinfo">Only what you see on the card is included: no wallet address, no balances. Points and rank are typed by you — the Arcus API does not expose them per wallet.</p>
+      <p class="shnote shinfo">Only what you see on the card is included: no wallet address, no balances. Points are looked up by your name in the public Arcus points leaderboard, because the API does not expose points per wallet.</p>
       <label>Display name<input id="shName" type="text" placeholder="Arcus Trade Stats" maxlength="28"></label>
-      <label>Points this week <small>(from the Arcus rewards page)</small><input id="shPts" type="number" step="any" min="0"></label>
-      <label>Rank (optional)<input id="shRank" type="number" step="1" min="1"></label>
+      <label><span>Points leaderboard name <span class="qtip" tabindex="0" role="note" aria-label="Where to find your name">?<span class="qtipbox"><b>Where to find it</b><span>1) Open app.arcus.xyz/rewards and log in.</span><span>2) In the Points Leaderboard find your own row, marked “You”.</span><span>3) Copy the name or the rank number from that row and paste it here.</span><img src="hint-rewards.png" alt="Your row in the Points Leaderboard on app.arcus.xyz/rewards: the rank number and the name are circled" width="280"><span class="qtipsmall">Either one works. With a rank number (for example 4208) the site looks up the name itself, useful when the name is cut off or looks different.</span></span></span> <small>(e.g. Twilight Scarlet Manta)</small></span><input id="shLbName" type="text" placeholder="Name from app.arcus.xyz/rewards, or your rank" maxlength="40" autocomplete="off" spellcheck="false"></label>
+      <div class="shnote">Copy it from your row on <a href="https://app.arcus.xyz/rewards" target="_blank" rel="noopener">app.arcus.xyz/rewards</a> (Points Leaderboard) and paste it here. You can also type your rank number.</div>
+      <label class="chk"><input type="checkbox" id="shPtsAll"> show total points (all time) instead of this week's</label>
+      <div class="shnote" id="shPtsMsg"></div>
       <div class="shbg"><span>Background image <small>(optional)</small></span>
         <div class="shbgrow"><button class="btn small" id="shBgBtn" type="button">Choose image…</button><button class="btn small" id="shBgClear" type="button">remove</button></div>
         <input id="shBg" type="file" accept="image/*" hidden>

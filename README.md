@@ -25,8 +25,14 @@ in the first tab. Deep link: `#leaderboard`. The API returns at most 100 rows pe
 
 ## Stats image (PNG for Discord)
 "🖼 Create stats image" opens a weekly card (volume, weekday bars, fills/points panel, PnL, funding, fees, active days). Use ‹ › to switch
-weeks. Display name, optional background image, points and rank are typed by you (the Arcus API does not expose points or a weekly rank
-per wallet); "show profit / loss" hides the PnL block. The card never contains the wallet address or balances.
+weeks. Display name and optional background image are typed by you; "show profit / loss" hides the PnL block. The card never contains the wallet address or balances.
+
+Points: type your name from the public Arcus points leaderboard (e.g. `Twilight Scarlet Manta`). The site finds it in `points-api.arcus.xyz/v1/leaderboard`
+(500 rows per request, no search parameter, so it pages until the name is found) and shows the rank, tier and points. The name is the one in the API; if you renamed yourself in the app, your row there can show a different name, so you may type your rank number instead (e.g. `4208`) and the site fills in the name. By default the card shows the points of the
+selected week; the checkbox "show total points (all time)" shows the running total instead. The API only returns the running total, so the points of one week
+are the total after that week's drop (Wednesday 19:00 GMT) minus the total after the previous drop, taken from `points-history.json`. That file is built locally from
+snapshots of the leaderboard (`node build-history.js` in the separate `arcus-points` folder: `snapshot.js` saves a snapshot, a Windows scheduled task runs it before
+and after each drop). Weeks without a snapshot show "No data". The current week shows "Not distributed yet" until its drop.
 
 The six stats at the bottom of the card are user-selectable (28+ available: activity, costs, P&L, best/worst market,
 winning streak, volume vs previous week, …). Defaults: Realized PnL (net), Total account change, Funding, Fees paid,
