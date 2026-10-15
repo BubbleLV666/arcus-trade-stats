@@ -814,7 +814,7 @@ function shPoints(d) {   // content of the POINTS panel: { big, label, name, sub
   const cur = histCum(e.name, w.n), prev = w.n === 1 ? 0 : histCum(e.name, w.n - 1);
   if (cur === undefined || prev === undefined) return { msg: ['No data for week ' + w.n, 'The API only returns the running total,', 'weekly values need saved snapshots'] };
   const pts = Math.round((cur - prev) * 100) / 100, a = PH.data.cum[w.n]; let above = 0; for (let i = 0; i < a.length; i++) if (a[i] > cur) above++;
-  return { big: fmt(pts, 2), label, name: e.name, sub: `Rank #${fmt(above + 1, 0)} after the drop · ${e.tier}`, perM: d.vol > 0 ? `${fmt(pts / d.vol * 1e6, 1)} pts per $1M volume` : '' };
+  return { big: fmt(pts, 2), label, name: e.name, sub: `Rank #${fmt(above + 1, 0)} after the drop · ${e.tier}` };
 }
 async function shLookup() {
   let nm = SH.lbName.trim(); if (!nm) { $('#shPtsMsg').textContent = ''; shRedraw(); return; }
@@ -896,7 +896,6 @@ function drawShare(cv, d, preview, R = 1.5) {   // layout is 1200 x 810; R = out
     let ns = 30; c.font = `700 ${ns}px ${FONT}`; while (c.measureText(pp.name).width > 360 && ns > 18) { ns -= 2; c.font = `700 ${ns}px ${FONT}`; }
     T(pp.name, 758, PY + 214, ns, '#d7e6dc', 700);
     T(pp.sub, 758, PY + 244, 20, MUT, 500);
-    if (pp.perM) T(pp.perM, 758, PY + 268, 18, MUT, 500);
   } else if (preview) {
     c.save(); rr(c, 724 + 6, PY + 6, 408, PH - 12, 22); c.setLineDash([10, 8]); c.strokeStyle = 'rgba(94,224,138,.55)'; c.lineWidth = 2; c.stroke(); c.restore();
     T('POINTS', 758, PY + 52, 20, GREEN, 700, 'left', 3);
