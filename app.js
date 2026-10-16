@@ -289,6 +289,7 @@ const TIPS = {
   'uPnL': 'Unrealized PnL of the position at the current mark price.',
   'uPnL %': 'Unrealized PnL as a percentage of the entry price move (direction-adjusted).',
   'Margin': 'Collateral locked by this position.',
+  'Funding': 'Funding received (+) or paid (−). When the funding rate is positive, longs pay shorts. In the positions table it is the total for that position since you started trading the market.',
   'Liq. price': 'Estimated liquidation price with all other marks unchanged (cross margin). An estimate, not the exchange formula.',
   'To liq.': 'Distance from the current mark price to the estimated liquidation price.',
   'Maker %': 'Share of this market\'s volume traded as maker.',
@@ -381,7 +382,7 @@ const CARDS = [
     const rows = R.rows.slice().sort((a, b) => b.notl - a.notl);
     return `<div class="scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Size $</th><th>Entry</th><th>Mark</th><th>uPnL</th><th>uPnL %</th><th>Leverage</th><th>Margin</th><th>Liq. price</th><th>To liq.</th><th>Funding</th></tr></thead><tbody>` +
       rows.map(({ p, s, mid, notl, liq, dist }) => { const up = n(p.unrealizedPnl), ent = n(p.averageEntryPrice), pc = ent ? (s > 0 ? 1 : -1) * (mid - ent) / ent * 100 : 0;
-        return `<tr><td>${esc(p.marketDisplayName)}</td><td><span class="tag ${s > 0 ? 'ok' : 'bad'}">${s > 0 ? '▲ LONG' : '▼ SHORT'}</span></td><td class="num">${money(notl)}</td><td class="num">${pxf(ent)}</td><td class="num">${pxf(mid)}</td><td class="num ${cls(up)}">${smoney(up, 2)}</td><td class="num ${cls(pc)}">${sgn(pc, 2)}%</td><td class="num">${esc(p.leverage)}× ${p.marginMode === 'ISOLATED' ? 'iso' : 'cross'}</td><td class="num">${money(n(p.marginUsed))}</td><td class="num">${liq ? pxf(liq) : '—'}</td><td class="num">${dist == null ? '—' : fmt(dist, 1) + '%'}</td><td class="num ${cls(-n(p.cumulativeFunding && p.cumulativeFunding.allTime))}">${smoney(-n(p.cumulativeFunding && p.cumulativeFunding.allTime), 2)}</td></tr>`; }).join('') + `</tbody></table></div>
+        return `<tr><td>${esc(p.marketDisplayName)}</td><td><span class="tag ${s > 0 ? 'ok' : 'bad'}">${s > 0 ? '▲ LONG' : '▼ SHORT'}</span></td><td class="num">${money(notl)}</td><td class="num">${pxf(ent)}</td><td class="num">${pxf(mid)}</td><td class="num ${cls(up)}">${smoney(up, 2)}</td><td class="num ${cls(pc)}">${sgn(pc, 2)}%</td><td class="num">${esc(p.leverage)}× ${p.marginMode === 'ISOLATED' ? 'iso' : 'cross'}</td><td class="num">${money(n(p.marginUsed))}</td><td class="num">${liq ? pxf(liq) : '—'}</td><td class="num">${dist == null ? '—' : fmt(dist, 1) + '%'}</td><td class="num ${cls(n(p.cumulativeFunding && p.cumulativeFunding.allTime))}">${smoney(n(p.cumulativeFunding && p.cumulativeFunding.allTime), 2)}</td></tr>`; }).join('') + `</tbody></table></div>
       <p class="note">Cross-margin: each liquidation price assumes all other marks stay unchanged; maintenance fractions come from /v1/markets. This is an estimate, not the exchange's formula. Not computed for isolated positions.</p>`;
   } },
   { id: 'activity', title: 'Trading style', sub: fsub, w: 4, render(S) {
