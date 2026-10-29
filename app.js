@@ -179,8 +179,10 @@ const WEEK = 7 * 86400e3;
 let period = { key: 'cur' };   // every visit opens on the current week (not remembered between visits)
 const seasonStart = S => { const t = S && S.meta && S.meta.season && Date.parse(S.meta.season.starts_at), d = new Date(t || Date.UTC(2026, 8, 30)); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };   // week anchor = 00:00 UTC of the season's first day (Wed 30 Sep)
 function weeksList(S) { const st = seasonStart(S), now = Date.now(), a = []; for (let k = 0; st + k * WEEK < now; k++) a.push({ n: k + 1, from: st + k * WEEK, to: Math.min(st + (k + 1) * WEEK, now), end: st + (k + 1) * WEEK - 1, cur: st + (k + 1) * WEEK > now }); return a; }
+const PRESETS = [['24h', '24 h', 'Last 24 hours', 864e5], ['7d', '7 d', 'Last 7 days', 7 * 864e5], ['30d', '30 d', 'Last 30 days', 30 * 864e5], ['90d', '90 d', 'Last 90 days', 90 * 864e5]];
 function getPeriod(S) {   // null = all time; else { label, from, to } in microseconds
   if (period.key === 'total') return null;
+  const pz = PRESETS.find(x => x[0] === period.key); if (pz) return { label: pz[2], from: (Date.now() - pz[3]) * 1000, to: Date.now() * 1000 };
   if (period.key === 'custom') return period.from && period.to ? { label: dtlU(period.from * 1000) + ' – ' + dtlU(period.to * 1000) + ' GMT', from: period.from * 1000, to: period.to * 1000 } : null;
   const w = weeksList(S);
   if (period.key === 'cur') { const c = w[w.length - 1]; return c ? { label: `Current week (${c.n})`, from: c.from * 1000, to: Date.now() * 1000 } : null; }
@@ -663,7 +665,7 @@ let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(ren
 function renderPeriodBar() {
   const w = weeksList(S), bar = $('#periodbar'), k = period.key, fmtD = ms => new Date(ms).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
   const btn = (key, label, small) => `<button class="pbtn ${k === key ? 'on' : ''}" data-p="${key}">${label}${small ? `<small>${small}</small>` : ''}</button>`;
-  bar.innerHTML = btn('total', 'All time') + w.filter(x => !x.cur).map(x => btn('w' + x.n, 'Week ' + x.n, fmtD(x.from) + '–' + fmtD(x.end))).join('') +
+  bar.innerHTML = btn('total', 'All time') + PRESETS.map(x => btn(x[0], x[1])).join('') + w.filter(x => !x.cur).map(x => btn('w' + x.n, 'Week ' + x.n, fmtD(x.from) + '–' + fmtD(x.end))).join('') +
     (w.length ? btn('cur', 'Current', w[w.length - 1].cur ? 'wk ' + w[w.length - 1].n : '') : '') + btn('custom', 'Custom range…') +
     `<span class="pdesc" title="Week 1 = 30 Sep – 6 Oct, Week 2 = 7 – 13 Oct, and so on (Wednesday 00:00 GMT to Tuesday 23:59 GMT). Not officially confirmed by the Arcus team.">ⓘ weeks: Wed–Tue, 00:00 GMT</span>`;
   $('#custom').hidden = k !== 'custom'; $('#pnote').textContent = 'Weeks are counted from Wednesday 00:00 GMT (UTC) to the next Tuesday 23:59 GMT. This schedule is our assumption: the Arcus team has not officially confirmed that the weekly snapshot is taken at this time.';
@@ -1095,6 +1097,16 @@ function showView(v, keepHash) {
 $('#tabs').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) showView(t.dataset.view); });
 addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h === 'leaderboard') showView('lb', true); else if (/^0x[0-9a-fA-F]{40}/.test(h)) { const [a, i] = h.split(':'); showView('stats', true); if (!S || S.addr !== a.toLowerCase() || S.idx !== (parseInt(i || '0', 10) || 0)) { $('#addr').value = a; loadWallet(a, parseInt(i || '0', 10) || 0); } } });
 $('#ver').textContent = VERSION;
+/* platform volume of the last 24 hours and open interest (all markets), shown in the header and refreshed every minute */
+async function loadPlatform() {
+  try {
+    const d = await get(API, '/markets', {}, 20), a = Array.isArray(d) ? d : Object.values(d.markets || d), vol = a.reduce((s, m) => s + n(m.volume24hNotional), 0);
+    const oiOf = m => n(m.openInterest) * n(m.markPrice), oi = a.reduce((s, m) => s + oiOf(m), 0), top = a.slice().sort((x, y) => oiOf(y) - oiOf(x)).slice(0, 3).map(m => `${m.baseAsset} $${big(oiOf(m))}`).join(', ');
+    $('#platOI').textContent = '$' + big(oi); $('#platV').textContent = '$' + big(vol);
+    $('#plat').title = `All ${a.length} markets on Arcus.\nVolume: last 24 hours (rolling window).\nOI: open interest in USD (open interest in coins × mark price). Largest: ${top}.\nUpdated ${new Date().toLocaleTimeString('en-US', { hour12: false })}.`;
+  } catch (e) { $('#platV').textContent = '—'; $('#platOI').textContent = '—'; }
+}
+loadPlatform(); setInterval(() => { if (!document.hidden) loadPlatform(); }, 60000);
 renderCardsList(); renderRecent(); setAuto(); renderPeriodBar();
 { const h = location.hash.slice(1); if (h === 'leaderboard') showView('lb', true); else if (h) { const [a, i] = h.split(':'); $('#addr').value = a; loadWallet(a, parseInt(i || '0', 10) || 0); } }
 })();
