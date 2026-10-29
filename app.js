@@ -916,7 +916,7 @@ function drawShare(cv, d, preview, R = 1.5) {   // layout is 1200 x 810; R = out
     let size = 46; c.font = `800 ${size}px ${FONT}`; while (c.measureText(it[1]).width > 330 && size > 24) { size -= 2; c.font = `800 ${size}px ${FONT}`; }
     T(it[1], x, y + 48, size, it[2], 800);
   });
-  T('Data from the exchange API · unofficial · not financial advice', 56, H - 54, 17, '#5f776a', 500);
+  T('Data from the exchange API · unofficial', 56, H - 54, 17, '#5f776a', 500);
   T('Weeks: Wed 00:00 – Tue 23:59 GMT (assumed, not officially confirmed by the Arcus team)', 56, H - 28, 17, '#5f776a', 500);
 }
 function shPreviewSize() {
