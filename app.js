@@ -801,10 +801,14 @@ async function plLookup(name) {
 const PH = { data: null, tried: false };
 async function loadPtsHistory() {
   if (PH.tried) return; PH.tried = true;
-  try {
-    const r = await fetch('points-history.json', { cache: 'no-cache' }); if (!r.ok) return; const j = await r.json();
-    PH.data = { idx: new Map(j.names.map((nm, i) => [nm.toLowerCase(), i])), cum: j.cum || {} };
-  } catch (e) { }
+  // inside perp-dex-stats the weekly file is read from the Arcus repository first, so one push there updates both sites; the local copy is the fallback
+  const urls = /\/perp-dex-stats\//.test(location.pathname) ? ['https://bubblelv666.github.io/arcus-trade-stats/points-history.json', 'points-history.json'] : ['points-history.json'];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: 'no-cache' }); if (!r.ok) continue; const j = await r.json();
+      PH.data = { idx: new Map(j.names.map((nm, i) => [nm.toLowerCase(), i])), cum: j.cum || {} }; return;
+    } catch (e) { }
+  }
 }
 const dropAt = n => seasonStart(S) + n * WEEK + 19 * 3600e3;   // week n is paid on the next Wednesday, 19:00 GMT
 function histCum(nm, n) { const H = PH.data, a = H && H.cum[n], i = H && H.idx.get(nm.toLowerCase()); return a ? (i == null ? 0 : a[i]) : undefined; }
